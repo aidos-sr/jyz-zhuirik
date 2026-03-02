@@ -182,12 +182,25 @@ function addStudent() {
     if (!isAdmin) return;
     const name = document.getElementById("newName").value.trim();
     const cls = document.getElementById("newClass").value;
+    const baseScoreInput = document.getElementById("newBaseScore").value;
+    const baseScore = parseInt(baseScoreInput) || 0;
     if (!name || !cls) return alert("Аты-жөні мен сыныбын таңдаңыз!");
     const id = nextId;
     const scores = {}; for (let k in CRITERIA) scores[k] = 0;
-    db.ref(`/students/${id}`).set({ id, name, class: cls, scores });
+    db.ref(`/students/${id}`).set({ id, name, class: cls, scores, baseScore });
     db.ref("/nextId").set(id + 1);
     document.getElementById("newName").value = "";
+    document.getElementById("newBaseScore").value = "";
+}
+
+function editBaseScore(sid) {
+    if (!isAdmin) return;
+    const s = students.find(s => s.id === sid); if (!s) return;
+    const val = prompt(`"${s.name}" оқушысының бастапқы баллы:`, s.baseScore || 0);
+    if (val === null) return;
+    const num = parseInt(val);
+    if (isNaN(num)) return alert("Сан енгізіңіз!");
+    db.ref(`/students/${sid}/baseScore`).set(num);
 }
 
 const scoreUpdateQueue = {};
@@ -245,7 +258,7 @@ function deleteStudent(sid) {
 }
 
 function totalScore(s) {
-    let sum = BASE_SCORE;
+    let sum = BASE_SCORE + (s.baseScore || 0);
     for (let k in CRITERIA) sum += (s.scores?.[k] || 0);
     return sum;
 }
@@ -335,11 +348,14 @@ function renderStudents() {
         card.innerHTML = `
             <div class="card-header">
                 <div><span class="card-name">${s.name}</span><span class="card-class">${s.class}</span></div>
-                <div class="card-score-badge ${scoreClass}">${score} балл</div>
+                <div style="display:flex;align-items:center;gap:10px">
+                    ${s.baseScore ? `<span style="font-size:12px;color:var(--text2);background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:20px;">🎯 Бастапқы: ${s.baseScore}</span>` : ''}
+                    <div class="card-score-badge ${scoreClass}">${score} балл</div>
+                </div>
             </div>
             <button class="toggle-btn" onclick="toggleCriteria(this)">📋 Критерийлер</button>
             <div class="criteria-body" style="display:none">${criteriaHtml}</div>
-            <div>${isAdmin ? `<button class="btn-delete" onclick="deleteStudent(${s.id})">🗑 Өшіру</button>` : ''}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin ? `<button class="btn-delete" onclick="deleteStudent(${s.id})">🗑 Өшіру</button><button class="btn-delete" style="color:var(--accent);border-color:rgba(124,106,255,0.3);background:rgba(124,106,255,0.1)" onclick="editBaseScore(${s.id})">✏️ Бастапқы балл</button>` : ''}</div>
         `;
         container.appendChild(card);
     });
