@@ -334,11 +334,13 @@ function renderStudents() {
     let rank = 1;
     sortedPool.forEach((s, idx) => {
         if (idx > 0 && totalScore(s) === totalScore(sortedPool[idx - 1])) {
+            // Тең балл — бірдей орын, rank өспейді
             rankMap[s.id] = rankMap[sortedPool[idx - 1].id];
         } else {
+            // Орын = нақты индекс + 1 (алдыңғы тең орындарды есептейді)
+            rank = idx + 1;
             rankMap[s.id] = rank;
         }
-        rank++;
     });
 
     container.innerHTML = "";
