@@ -1,11 +1,11 @@
 const firebaseConfig = {
-    apiKey: "AIzaSyDhNCIAxgOhfcE1BqN6Ib7gIxslZiy5B44",
-    authDomain: "jyz-zhuirik.firebaseapp.com",
-    databaseURL: "https://jyz-zhuirik-default-rtdb.firebaseio.com",
-    projectId: "jyz-zhuirik",
-    storageBucket: "jyz-zhuirik.firebasestorage.app",
-    messagingSenderId: "4663975820",
-    appId: "1:4663975820:web:c8be556d1849044a6280a9"
+  apiKey: "AIzaSyDjgsWQSosY9WxM3Fgmp0Ay-mLQKQc-s-I",
+  authDomain: "juz-zhuirik.firebaseapp.com",
+  databaseURL: "https://juz-zhuirik-default-rtdb.firebaseio.com",
+  projectId: "juz-zhuirik",
+  storageBucket: "juz-zhuirik.firebasestorage.app",
+  messagingSenderId: "985309043409",
+  appId: "1:985309043409:web:5236aa1ae8a71a92dec3f0"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
@@ -105,6 +105,7 @@ const CRITERIA = {};
 SECTIONS.forEach(s => s.criteria.forEach(c => { CRITERIA[c.key] = c.score; }));
 
 let isAdmin = false, students = [], classes = [], nextId = 1, activeTab = "school";
+let updatingScore = false; // флаг: идёт обновление балла, не перерисовывать всё
 
 auth.onAuthStateChanged(user => {
     isAdmin = !!user;
@@ -119,7 +120,14 @@ db.ref("/").on("value", snap => {
     students = d.students ? Object.values(d.students) : [];
     classes = d.classes || [];
     nextId = d.nextId || 1;
-    renderTabs(); renderStudents();
+
+    if (updatingScore) {
+        // Только обновляем значения в DOM без перерисовки
+        updatingScore = false;
+        updateScoresInDOM();
+    } else {
+        renderTabs(); renderStudents();
+    }
 });
 
 function adminLogin() {
@@ -170,132 +178,133 @@ function addClass() {
 
 function deleteClass(cls) {
     if (!isAdmin) return;
-    if (!confirm(`"${cls}" сыныбын өшіру?`)) return;
-    const newStudents = students.filter(s => s.class !== cls);
-    const obj = {}; newStudents.forEach(s => obj[s.id] = s);
-    if (activeTab === cls) activeTab = "school";
-    db.ref("/classes").set(classes.filter(c => c !== cls));
-    db.ref("/students").set(Object.keys(obj).length ? obj : null);
+    if (!confirm(`"${cls}" сыныбын өшіресіз бе?`)) return;
+    const newClasses = classes.filter(c => c !== cls);
+    db.ref("/classes").set(newClasses);
 }
 
 function addStudent() {
     if (!isAdmin) return;
-    const name = document.getElementById("newName").value.trim();
-    const cls = document.getElementById("newClass").value;
-    const baseScoreInput = document.getElementById("newBaseScore").value;
-    const baseScore = parseInt(baseScoreInput) || 0;
-    if (!name || !cls) return alert("Аты-жөні мен сыныбын таңдаңыз!");
+    const nameInp = document.getElementById("newName");
+    const baseInp = document.getElementById("newBaseScore");
+    const classInp = document.getElementById("newClass");
+    const name = nameInp.value.trim();
+    const cls = classInp.value;
+    const baseScore = parseInt(baseInp.value) || 0;
+    if (!name) return alert("Оқушы атын жазыңыз!");
+    if (!cls) return alert("Сынып таңдаңыз!");
     const id = nextId;
-    const scores = {}; for (let k in CRITERIA) scores[k] = 0;
-    db.ref(`/students/${id}`).set({ id, name, class: cls, scores, baseScore });
+    db.ref(`/students/${id}`).set({ id, name, class: cls, baseScore, scores: {} });
     db.ref("/nextId").set(id + 1);
-    document.getElementById("newName").value = "";
-    document.getElementById("newBaseScore").value = "";
+    nameInp.value = "";
+    baseInp.value = "";
 }
 
-function editBaseScore(sid) {
+function deleteStudent(id) {
     if (!isAdmin) return;
-    const s = students.find(s => s.id === sid); if (!s) return;
-    const val = prompt(`"${s.name}" оқушысының бастапқы баллы:`, s.baseScore || 0);
+    if (!confirm("Оқушыны өшіресіз бе?")) return;
+    db.ref(`/students/${id}`).remove();
+}
+
+function editBaseScore(id) {
+    if (!isAdmin) return;
+    const s = students.find(s => s.id === id);
+    if (!s) return;
+    const val = prompt(`${s.name} үшін бастапқы балл:`, s.baseScore || 0);
     if (val === null) return;
     const num = parseInt(val);
-    if (isNaN(num)) return alert("Сан енгізіңіз!");
-    db.ref(`/students/${sid}/baseScore`).set(num);
+    if (isNaN(num)) return alert("Сан жазыңыз!");
+    db.ref(`/students/${id}/baseScore`).set(num);
 }
 
-const scoreUpdateQueue = {};
-
-function updateScore(sid, key, adding) {
+function updateScore(id, key, increment) {
     if (!isAdmin) return;
-    const s = students.find(s => s.id === sid); if (!s) return;
-    const step = Math.abs(CRITERIA[key]);
+    const s = students.find(s => s.id === id);
+    if (!s) return;
+    const current = s.scores?.[key] || 0;
+    const delta = CRITERIA[key] || 0;
+    const newVal = increment ? current + delta : current - delta;
+    updatingScore = true;
+    db.ref(`/students/${id}/scores/${key}`).set(newVal);
+}
 
-    // Debounce: накапливаем изменения и отправляем через 400мс
-    const queueKey = `${sid}_${key}`;
-    if (!scoreUpdateQueue[queueKey]) {
-        scoreUpdateQueue[queueKey] = { sid, key, delta: 0, base: s.scores[key] || 0 };
-    }
-    scoreUpdateQueue[queueKey].delta += adding ? step : -step;
-
-    // Визуально обновляем сразу
-    const newVal = scoreUpdateQueue[queueKey].base + scoreUpdateQueue[queueKey].delta;
-    const allVals = document.querySelectorAll(`[data-sid="${sid}"][data-key="${key}"]`);
-    allVals.forEach(el => {
-        el.textContent = newVal;
-        el.className = `score-val ${newVal > 0 ? 'pos' : newVal < 0 ? 'neg' : ''}`;
-    });
-
-    clearTimeout(scoreUpdateQueue[queueKey].timer);
-    scoreUpdateQueue[queueKey].timer = setTimeout(() => {
-        const q = scoreUpdateQueue[queueKey];
-        const finalVal = q.base + q.delta;
-
-        const open = {};
-        document.querySelectorAll('.criteria-body').forEach((b, i) => open[i] = b.style.display !== 'none');
-
-        db.ref(`/students/${q.sid}/scores/${q.key}`).set(finalVal).then(() => {
-            delete scoreUpdateQueue[queueKey];
-            setTimeout(() => {
-                document.querySelectorAll('.criteria-body').forEach((b, i) => {
-                    if (open[i]) {
-                        b.style.display = 'block';
-                        const btn = b.previousElementSibling;
-                        if (btn?.classList.contains('toggle-btn')) {
-                            btn.textContent = '🔼 Жабу';
-                            btn.classList.add('open');
-                        }
-                    }
-                });
-            }, 300);
+// Обновляет только цифры баллов в DOM — без закрытия критериев
+function updateScoresInDOM() {
+    students.forEach(s => {
+        // Обновляем каждый score-val для этого ученика
+        document.querySelectorAll(`.score-val[data-sid="${s.id}"]`).forEach(el => {
+            const key = el.getAttribute('data-key');
+            const val = s.scores?.[key] || 0;
+            el.textContent = val;
+            el.className = 'score-val' + (val > 0 ? ' pos' : val < 0 ? ' neg' : '');
         });
-    }, 400);
-}
 
-function deleteStudent(sid) {
-    if (!isAdmin) return;
-    const s = students.find(s => s.id === sid); if (!s) return;
-    if (confirm(`"${s.name}" өшірілсін бе?`)) db.ref(`/students/${sid}`).remove();
+        // Обновляем общий балл на карточке
+        const badge = document.querySelector(`.card-score-badge[data-sid="${s.id}"]`);
+        if (badge) {
+            const score = totalScore(s);
+            badge.textContent = `${score} балл`;
+            badge.className = 'card-score-badge' + (score > 0 ? ' pos' : score < 0 ? ' neg' : '');
+        }
+    });
 }
 
 function totalScore(s) {
-    let sum = BASE_SCORE + (s.baseScore || 0);
-    for (let k in CRITERIA) sum += (s.scores?.[k] || 0);
-    return sum;
+    const base = s.baseScore || 0;
+    const sc = s.scores ? Object.values(s.scores).reduce((a, b) => a + b, 0) : 0;
+    return base + sc;
 }
 
 function classTotal(cls) {
-    let earned = 0;
-    students.filter(s => s.class === cls).forEach(s => {
-        for (let k in CRITERIA) earned += (s.scores?.[k] || 0);
-    });
-    return earned;
+    return students.filter(s => s.class === cls).reduce((sum, s) => sum + totalScore(s), 0);
 }
 
-function setTab(tab) { activeTab = tab; renderTabs(); renderStudents(); }
-
 function renderTabs() {
-    const c = document.getElementById("tabs");
-    let html = `<button class="tab-btn ${activeTab==='school'?'active':''}" onclick="setTab('school')">🏫 Мектеп</button>`;
-    classes.forEach(cls => html += `<button class="tab-btn ${activeTab===cls?'active':''}" onclick="setTab('${cls}')">${cls}</button>`);
-    html += `<button class="tab-btn ${activeTab==='top'?'active':''}" onclick="setTab('top')">🏆 Топ</button>`;
-    html += `<button class="tab-btn ${activeTab==='classrating'?'active':''}" onclick="setTab('classrating')">📊 Сыныптар</button>`;
-    c.innerHTML = html;
+    const tabs = document.getElementById("tabs");
+    if (!tabs) return;
 
+    // ИСПРАВЛЕНИЕ: был класс "tab" — теперь "tab-btn" (совпадает с CSS)
+    let html = `
+        <button class="tab-btn ${activeTab==='school'?'active':''}" onclick="setTab('school')">🏫 Мектеп</button>
+        <button class="tab-btn ${activeTab==='top'?'active':''}" onclick="setTab('top')">🏆 Топ</button>
+        <button class="tab-btn ${activeTab==='classes'?'active':''}" onclick="setTab('classes')">📊 Сыныптар</button>
+        <button class="tab-btn ${activeTab==='stars'?'active':''}" onclick="setTab('stars')">⭐ Үздіктер</button>
+    `;
+    classes.forEach(cls => {
+        html += `<button class="tab-btn ${activeTab===cls?'active':''}" onclick="setTab('${cls}')">${cls}</button>`;
+    });
+
+    tabs.innerHTML = html;
+
+    // Обновляем select со списком классов в форме добавления
     const sel = document.getElementById("newClass");
-    if (sel) sel.innerHTML = `<option value="">— Сынып —</option>` + classes.map(c => `<option value="${c}">${c}</option>`).join("");
+    if (sel) {
+        sel.innerHTML = `<option value="">— Сынып —</option>`;
+        classes.forEach(c => sel.innerHTML += `<option value="${c}">${c}</option>`);
+    }
 
+    // Кнопка удаления класса — показываем только если выбран конкретный класс
     const delBtn = document.getElementById("deleteClassBtn");
     if (delBtn) {
-        if (activeTab !== "school" && activeTab !== "top" && activeTab !== "classrating") {
-            delBtn.textContent = `🗑 "${activeTab}" сыныбын өшіру`;
+        if (classes.includes(activeTab)) {
             delBtn.classList.remove("hidden");
-        } else { delBtn.classList.add("hidden"); }
+            delBtn.textContent = `🗑 "${activeTab}" сыныбын өшіру`;
+        } else {
+            delBtn.classList.add("hidden");
+        }
     }
+}
+
+function setTab(tab) {
+    activeTab = tab;
+    renderTabs();
+    renderStudents();
 }
 
 function renderStudents() {
     if (activeTab === "top") { renderTopPage(); return; }
-    if (activeTab === "classrating") { renderClassRating(); return; }
+    if (activeTab === "classes") { renderClassRating(); return; }
+    if (activeTab === "stars") { renderStarsPage(); return; }
 
     const container = document.getElementById("studentList");
     const top3box = document.getElementById("top3");
@@ -315,14 +324,38 @@ function renderStudents() {
         return;
     }
 
+    // Сортируем по баллу (по убыванию) для вкладки "Мектеп" и классов
+    const sortedFiltered = [...filtered].sort((a, b) => totalScore(b) - totalScore(a));
+
+    // Считаем места с учётом одинаковых баллов (если одинаковый балл — одинаковое место)
+    // Места считаются по всему pool (не только по filtered), чтобы при поиске место не менялось
+    const sortedPool = [...pool].sort((a, b) => totalScore(b) - totalScore(a));
+    const rankMap = {};
+    let rank = 1;
+    sortedPool.forEach((s, idx) => {
+        if (idx > 0 && totalScore(s) === totalScore(sortedPool[idx - 1])) {
+            rankMap[s.id] = rankMap[sortedPool[idx - 1].id];
+        } else {
+            rankMap[s.id] = rank;
+        }
+        rank++;
+    });
+
     container.innerHTML = "";
-    filtered.forEach((s, idx) => {
+    sortedFiltered.forEach((s, idx) => {
         const card = document.createElement("div");
         card.className = "card";
         card.style.animationDelay = `${idx * 0.05}s`;
 
         const score = totalScore(s);
         const scoreClass = score > 0 ? 'pos' : score < 0 ? 'neg' : '';
+        const place = rankMap[s.id];
+
+        // Стиль номера места: золото для 1-3, серебро/бронза, обычный для остальных
+        let placeStyle = 'color:var(--text2);';
+        if (place === 1) placeStyle = 'color:#FFD700;';
+        else if (place === 2) placeStyle = 'color:#C0C0C0;';
+        else if (place === 3) placeStyle = 'color:#CD7F32;';
 
         let criteriaHtml = '';
         SECTIONS.forEach(sec => {
@@ -347,20 +380,22 @@ function renderStudents() {
 
         card.innerHTML = `
             <div class="card-header">
-                <div><span class="card-name">${s.name}</span><span class="card-class">${s.class}</span></div>
+                <div style="display:flex;align-items:center;gap:14px">
+                    <span style="font-family:'Unbounded',cursive;font-size:22px;font-weight:800;min-width:40px;${placeStyle}">${place}.</span>
+                    <div><span class="card-name">${s.name}</span><span class="card-class">${s.class}</span></div>
+                </div>
                 <div style="display:flex;align-items:center;gap:10px">
                     ${s.baseScore ? `<span style="font-size:12px;color:var(--text2);background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:20px;">🎯 Бастапқы: ${s.baseScore}</span>` : ''}
-                    <div class="card-score-badge ${scoreClass}">${score} балл</div>
+                    <div class="card-score-badge ${scoreClass}" data-sid="${s.id}">${score} балл</div>
                 </div>
             </div>
             <button class="toggle-btn" onclick="toggleCriteria(this)">📋 Критерийлер</button>
             <div class="criteria-body" style="display:none">${criteriaHtml}</div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin ? `<button class="btn-delete" onclick="deleteStudent(${s.id})">🗑 Өшіру</button><button class="btn-delete" style="color:var(--accent);border-color:rgba(124,106,255,0.3);background:rgba(124,106,255,0.1)" onclick="editBaseScore(${s.id})">✏️ Бастапқы балл</button>` : ''}</div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">${isAdmin ? `<button class="btn-delete" onclick="deleteStudent(${s.id})">🗑 Өшіру</button><button class="btn-delete" style="color:var(--accent);border-color:rgba(124,106,255,0.3);background:rgba(124,106,255,0.1)" onclick="editBaseScore(${s.id})">✏️ Бастапқы балл</button>` : ''}</div>
         `;
         container.appendChild(card);
     });
 
-    // Топ-3 балл бойынша
     const sortedByScore = [...pool].sort((a, b) => totalScore(b) - totalScore(a));
     const withScore = sortedByScore.filter(s => totalScore(s) > 0);
     const allEqual = sortedByScore.length > 0 && sortedByScore.every(s => totalScore(s) === totalScore(sortedByScore[0]));
@@ -398,11 +433,10 @@ function renderTopPage() {
 
     html += `<div class="top-header red" style="margin-top:30px">⚠️ Ең төмен балл</div>`;
     lowest.forEach((s, i) => {
-        const prev = i > 0 ? totalScore(lowest[i-1]) : null;
         html += `<div class="card" style="border-left:3px solid var(--red);animation-delay:${i*0.07}s">
             <div class="card-header">
                 <div><span class="card-name">${s.name}</span><span class="card-class">${s.class}</span></div>
-                <div class="card-score-badge ${totalScore(s) < 0 ? 'negative' : ''}" style="background:linear-gradient(135deg,var(--red),#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${totalScore(s)} балл</div>
+                <div class="card-score-badge" style="background:linear-gradient(135deg,var(--red),#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent">${totalScore(s)} балл</div>
             </div>
         </div>`;
     });
@@ -466,4 +500,175 @@ function toggleCriteria(btn) {
     body.style.display = isOpen ? 'none' : 'block';
     btn.textContent = isOpen ? '📋 Критерийлер' : '🔼 Жабу';
     btn.classList.toggle('open', !isOpen);
+}
+
+// ── Үздіктер (Лучшие ученики по месяцам) ──
+
+const KK_MONTHS = [
+    "Қыркүйек", "Қазан", "Қараша", "Желтоқсан",
+    "Қаңтар", "Ақпан", "Наурыз", "Сәуір",
+    "Мамыр", "Маусым", "Шілде", "Тамыз"
+];
+
+// Стандартные награды (можно добавлять свои)
+const DEFAULT_AWARDS = ["Ай үздігі", "Үздік көшбасшы", "Үздік спортшы", "Үздік белсенді"];
+
+let starStudents = [];
+let starsSelectedMonth = KK_MONTHS[0];
+
+db.ref("/starStudents").on("value", snap => {
+    starStudents = snap.val() ? Object.entries(snap.val()).map(([id, v]) => ({ id, ...v })) : [];
+    if (activeTab === "stars") renderStarsPage();
+});
+
+function renderStarsPage() {
+    document.getElementById("top3").innerHTML = "";
+    document.getElementById("sectionTitle").textContent = "⭐ Үздік оқушылар";
+    const container = document.getElementById("studentList");
+
+    // Форма добавления (только для админа)
+    let adminHtml = "";
+    if (isAdmin) {
+        const monthOptions = KK_MONTHS.map(m =>
+            `<option value="${m}" ${m === starsSelectedMonth ? 'selected' : ''}>${m}</option>`
+        ).join('');
+        const awardOptions = DEFAULT_AWARDS.map(a => `<option value="${a}">${a}</option>`).join('');
+
+        adminHtml = `
+        <div class="stars-add-form">
+            <div class="admin-card-icon">⭐</div>
+            <h3 style="font-family:'Unbounded',cursive;font-size:13px;color:var(--text2);margin-bottom:14px;">Үздік оқушы қосу</h3>
+            <div class="input-group">
+                <select id="starMonth" class="inp" onchange="starsSelectedMonth=this.value">${monthOptions}</select>
+                <input type="text" id="starYear" placeholder="Оқу жылы (мыс: 2024-2025)" class="inp">
+                <input type="text" id="starName" placeholder="Аты-жөні" class="inp">
+                <select id="starAward" class="inp">
+                    ${awardOptions}
+                    <option value="__custom__">✏️ Өз атауым...</option>
+                </select>
+                <input type="text" id="starAwardCustom" placeholder="Марапат атауы..." class="inp" style="display:none" oninput="">
+                <label class="star-photo-label">
+                    <span>📷 Фото таңдау</span>
+                    <input type="file" id="starPhoto" accept="image/*" onchange="previewStarPhoto(this)" style="display:none">
+                </label>
+                <img id="starPhotoPreview" style="display:none;width:100px;height:100px;object-fit:cover;border-radius:50%;margin:8px auto;border:3px solid var(--gold)">
+                <button class="btn-add" onclick="addStarStudent()">➕ Қосу</button>
+            </div>
+        </div>`;
+    }
+
+    // Группируем по месяцу+год
+    const grouped = {};
+    starStudents.forEach(s => {
+        const key = `${s.year || ''}__${s.month || ''}`;
+        if (!grouped[key]) grouped[key] = { month: s.month, year: s.year, items: [] };
+        grouped[key].items.push(s);
+    });
+
+    // Сортируем группы: сначала самые свежие (по порядку месяцев в учебном году)
+    const groupKeys = Object.keys(grouped).sort((a, b) => {
+        const ya = grouped[a].year || '', yb = grouped[b].year || '';
+        if (ya !== yb) return yb.localeCompare(ya);
+        return KK_MONTHS.indexOf(grouped[b].month) - KK_MONTHS.indexOf(grouped[a].month);
+    });
+
+    let groupsHtml = "";
+    if (groupKeys.length === 0) {
+        groupsHtml = isAdmin ? "" : `<div class="no-results">Үздік оқушылар әлі қосылмаған 🌟</div>`;
+    } else {
+        groupKeys.forEach(key => {
+            const g = grouped[key];
+            let cardsHtml = `<div class="stars-grid">`;
+            g.items.forEach(s => {
+                cardsHtml += `
+                <div class="star-card">
+                    <div class="star-photo-wrap">
+                        ${s.photo
+                            ? `<img src="${s.photo}" class="star-photo" alt="${s.name}">`
+                            : `<div class="star-photo-placeholder">👤</div>`}
+                    </div>
+                    <div class="star-award-badge">${s.award || ''}</div>
+                    <div class="star-name">${s.name}</div>
+                    ${isAdmin ? `<button class="btn-delete" style="margin-top:10px;width:100%;font-size:12px" onclick="deleteStarStudent('${s.id}')">🗑 Өшіру</button>` : ''}
+                </div>`;
+            });
+            cardsHtml += `</div>`;
+
+            groupsHtml += `
+            <div class="stars-month-group">
+                <div class="stars-month-title">
+                    <span class="stars-month-name">${g.month || ''}</span>
+                    ${g.year ? `<span class="stars-month-year">${g.year}</span>` : ''}
+                </div>
+                ${cardsHtml}
+            </div>`;
+        });
+    }
+
+    container.innerHTML = adminHtml + groupsHtml;
+
+    // Показываем/скрываем поле кастомной награды
+    const awardSel = document.getElementById("starAward");
+    if (awardSel) {
+        awardSel.addEventListener("change", () => {
+            const customInp = document.getElementById("starAwardCustom");
+            customInp.style.display = awardSel.value === "__custom__" ? "block" : "none";
+        });
+    }
+}
+
+function previewStarPhoto(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const preview = document.getElementById("starPhotoPreview");
+        preview.src = e.target.result;
+        preview.style.display = "block";
+        const label = document.querySelector(".star-photo-label span");
+        if (label) label.textContent = "✅ " + file.name;
+    };
+    reader.readAsDataURL(file);
+}
+
+async function addStarStudent() {
+    if (!isAdmin) return;
+    const name = document.getElementById("starName").value.trim();
+    const year = document.getElementById("starYear").value.trim();
+    const month = document.getElementById("starMonth").value;
+    const awardSel = document.getElementById("starAward").value;
+    const awardCustom = document.getElementById("starAwardCustom").value.trim();
+    const award = awardSel === "__custom__" ? awardCustom : awardSel;
+    const photoInput = document.getElementById("starPhoto");
+
+    if (!name) return alert("Атын жазыңыз!");
+    if (!award) return alert("Марапат таңдаңыз!");
+
+    let photo = "";
+    if (photoInput.files[0]) {
+        photo = await new Promise(res => {
+            const reader = new FileReader();
+            reader.onload = e => res(e.target.result);
+            reader.readAsDataURL(photoInput.files[0]);
+        });
+    }
+
+    const newRef = db.ref("/starStudents").push();
+    await newRef.set({ name, year, month, award, photo });
+
+    // Сбрасываем форму
+    document.getElementById("starName").value = "";
+    document.getElementById("starYear").value = "";
+    document.getElementById("starAwardCustom").value = "";
+    document.getElementById("starAwardCustom").style.display = "none";
+    document.getElementById("starPhoto").value = "";
+    document.getElementById("starPhotoPreview").style.display = "none";
+    const lbl = document.querySelector(".star-photo-label span");
+    if (lbl) lbl.textContent = "📷 Фото таңдау";
+}
+
+function deleteStarStudent(id) {
+    if (!isAdmin) return;
+    if (!confirm("Өшіресіз бе?")) return;
+    db.ref(`/starStudents/${id}`).remove();
 }
