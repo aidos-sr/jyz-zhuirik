@@ -331,15 +331,11 @@ function renderStudents() {
     // Места считаются по всему pool (не только по filtered), чтобы при поиске место не менялось
     const sortedPool = [...pool].sort((a, b) => totalScore(b) - totalScore(a));
     const rankMap = {};
-    let rank = 1;
     sortedPool.forEach((s, idx) => {
         if (idx > 0 && totalScore(s) === totalScore(sortedPool[idx - 1])) {
-            // Тең балл — бірдей орын, rank өспейді
             rankMap[s.id] = rankMap[sortedPool[idx - 1].id];
         } else {
-            // Орын = нақты индекс + 1 (алдыңғы тең орындарды есептейді)
-            rank = idx + 1;
-            rankMap[s.id] = rank;
+            rankMap[s.id] = idx + 1;
         }
     });
 
