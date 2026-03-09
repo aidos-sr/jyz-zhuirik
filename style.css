@@ -187,7 +187,7 @@ body::after {
 .card-name { font-size: 15px; font-weight: 700; }
 .card-class { font-size: 11px; color: var(--blue3); background: rgba(37,99,235,0.1); padding: 3px 10px; border-radius: 6px; margin-left: 10px; font-family: 'Space Mono', monospace; border: 1px solid rgba(37,99,235,0.2); }
 .card-score-badge { font-family: 'Space Mono', monospace; font-size: 20px; font-weight: 700; color: var(--blue3); }
-.card-score-badge::after { content: ' б'; font-size: 11px; color: var(--text2); font-weight: 400; }
+.card-score-badge::after { content: ''; }
 .card-score-badge.negative { color: var(--red); }
 
 .toggle-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: var(--radius2); background: transparent; color: var(--text2); font-family: 'Outfit', sans-serif; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s; margin-top: 6px; border: 1px solid var(--border2); }
