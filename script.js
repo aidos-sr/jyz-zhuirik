@@ -29,52 +29,6 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const auth = firebase.auth();
 
-// ── Онлайн қатысушылар саны ──
-const presenceRef = db.ref('/presence');
-const connectedRef = db.ref('.info/connected');
-let myPresenceRef = null;
-
-connectedRef.on('value', snap => {
-    if (snap.val() === true) {
-        myPresenceRef = presenceRef.push();
-        myPresenceRef.onDisconnect().remove();
-        myPresenceRef.set({ ts: Date.now() });
-
-        // Жүректің соғуы — әр 1 сағат сайын уақытты жаңарту
-        setInterval(() => {
-            if (myPresenceRef) myPresenceRef.set({ ts: Date.now() });
-        }, 3600000);
-    }
-});
-
-// 2 сағаттан ескі жазбаларды өшіру
-setInterval(() => {
-    presenceRef.get().then(snap => {
-        if (!snap.exists()) return;
-        const now = Date.now();
-        snap.forEach(child => {
-            const data = child.val();
-            if (data && data.ts && (now - data.ts) > 7200000) {
-                child.ref.remove();
-            }
-        });
-    });
-}, 3600000);
-
-presenceRef.on('value', snap => {
-    const now = Date.now();
-    let count = 0;
-    snap.forEach(child => {
-        const data = child.val();
-        if (data && data.ts && (now - data.ts) < 7200000) count++;
-    });
-    onlineCount = count;
-    const el = document.getElementById('onlineCount');
-    if (el) el.textContent = onlineCount;
-});
-
-let onlineCount = 0;
-
 const SECTIONS = [
     { title: "І бөлім: Білім сапасы (әр тоқсан + жылдық)", criteria: [
         { key: "Білім: Үздік", score: 10 },
@@ -270,7 +224,6 @@ function updateScore(id, key, increment) {
     const newVal = increment ? current + delta : current - delta;
     updatingScore = true;
     db.ref(`/students/${id}/scores/${key}`).set(newVal);
-    db.ref(`/students/${id}/lastUpdated`).set(Date.now());
 }
 function updateScoresInDOM() {
     students.forEach(s => {
@@ -345,11 +298,6 @@ function renderStudents() {
     document.getElementById("sectionTitle").textContent =
         activeTab === "school" ? "📊 Мектеп рейтингі" : `📊 ${activeTab} сынып рейтингі`;
 
-    if (activeTab === "school") {
-        const titleEl = document.getElementById("sectionTitle");
-        titleEl.innerHTML = `📊 Мектеп рейтингі <span style="font-size:14px;font-weight:500;margin-left:12px;vertical-align:middle;"><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e;margin-right:5px;animation:pulse 1.5s infinite;vertical-align:middle"></span><span id="onlineCount">${onlineCount}</span> онлайн</span>`;
-    }
-
     if (filtered.length === 0) {
         container.innerHTML = `<div class="no-results">Оқушылар табылмады 🔍</div>`;
         top3box.innerHTML = ""; return;
@@ -403,20 +351,11 @@ function renderStudents() {
             });
         });
 
-        const lastUpdated = s.lastUpdated ? (() => {
-            const d = new Date(s.lastUpdated);
-            const now = new Date();
-            const isToday = d.toDateString() === now.toDateString();
-            const time = d.toLocaleTimeString('kk-KZ', { hour: '2-digit', minute: '2-digit' });
-            const date = d.toLocaleDateString('kk-KZ', { day: 'numeric', month: 'long' });
-            return isToday ? `Бүгін ${time}` : `${date} ${time}`;
-        })() : null;
-
         card.innerHTML = `
             <div class="card-header">
                 <div style="display:flex;align-items:center;gap:14px">
                     <span style="font-family:'Unbounded',cursive;font-size:22px;font-weight:800;min-width:40px;${placeStyle}">${place}.</span>
-                    <div><span class="card-name">${s.name}</span><span class="card-class">${s.class}</span>${lastUpdated ? `<span style="font-size:11px;color:var(--text2);display:block;margin-top:2px">🕐 ${lastUpdated}</span>` : ''}</div>
+                    <div><span class="card-name">${s.name}</span><span class="card-class">${s.class}</span></div>
                 </div>
                 <div style="display:flex;align-items:center;gap:10px">
                     ${s.baseScore ? `<span style="font-size:12px;color:var(--text2);background:rgba(255,255,255,0.06);padding:4px 10px;border-radius:20px;">🎯 Бастапқы: ${s.baseScore}</span>` : ''}
