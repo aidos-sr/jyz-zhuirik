@@ -1,3 +1,26 @@
+
+// ── Дизайн ауыстыру (глитч анимациямен) ──
+let currentTheme = localStorage.getItem('theme') || 'purple';
+if (currentTheme === 'blue') document.documentElement.classList.add('theme-blue');
+
+function toggleTheme() {
+    const overlay = document.getElementById('glitchOverlay');
+    overlay.classList.add('active');
+    setTimeout(() => {
+        if (currentTheme === 'purple') {
+            currentTheme = 'blue';
+            document.documentElement.classList.add('theme-blue');
+        } else {
+            currentTheme = 'purple';
+            document.documentElement.classList.remove('theme-blue');
+        }
+        localStorage.setItem('theme', currentTheme);
+    }, 300);
+    setTimeout(() => {
+        overlay.classList.remove('active');
+    }, 650);
+}
+
 const firebaseConfig = {
   apiKey: "AIzaSyDjgsWQSosY9WxM3Fgmp0Ay-mLQKQc-s-I",
   authDomain: "juz-zhuirik.firebaseapp.com",

@@ -8,9 +8,10 @@
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2">
 </head>
 <body>
+    <div class="glitch-overlay" id="glitchOverlay"></div>
     <div class="bg-orbs">
         <div class="orb orb1"></div>
         <div class="orb orb2"></div>
@@ -27,6 +28,7 @@
                 </div>
             </div>
             <div class="header-btns">
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Дизайн ауыстыру"><span class="icon-purple">🌌</span><span class="icon-blue">⚡</span></button>
                 <button class="btn-login" id="loginBtn" onclick="adminLogin()">
                     <span>🔐</span> Кіру
                 </button>
@@ -85,6 +87,7 @@
 
     <div class="made-by">made by Aidos</div>
 
+    <!-- Модальное окно входа -->
     <div class="modal-overlay hidden" id="loginModal" onclick="if(event.target===this)closeLoginModal()">
         <div class="modal-box">
             <div class="modal-icon">🔐</div>
@@ -106,6 +109,6 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=2"></script>
 </body>
 </html>
