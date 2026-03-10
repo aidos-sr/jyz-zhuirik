@@ -177,17 +177,27 @@ auth.onAuthStateChanged(user => {
     renderTabs(); renderStudents();
 });
 
-db.ref("/").on("value", snap => {
+// Деректерді бөлек тыңдау — presence өзгерсе қайта рендер болмайды
+let dataLoaded = false;
+
+db.ref("/students").on("value", snap => {
     const d = snap.val() || {};
-    students = d.students ? Object.values(d.students) : [];
-    classes = d.classes || [];
-    nextId = d.nextId || 1;
+    students = Object.values(d);
     if (updatingScore) {
         updatingScore = false;
         updateScoresInDOM();
     } else {
-        renderTabs(); renderStudents();
+        if (dataLoaded) { renderTabs(); renderStudents(); }
     }
+    if (!dataLoaded) { dataLoaded = true; renderTabs(); renderStudents(); }
+});
+
+db.ref("/classes").on("value", snap => {
+    classes = snap.val() || [];
+});
+
+db.ref("/nextId").on("value", snap => {
+    nextId = snap.val() || 1;
 });
 
 function adminLogin() {
